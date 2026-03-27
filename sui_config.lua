@@ -881,7 +881,33 @@ function M.getCoverBB(filepath, w, h)
     local cached = _bim_cover_cache[key]
     if cached then
         -- Update LRU access time in-place — no allocation, no list shift.
-        cached.t = os.time()
+        local now = os.time()
+        cached.t = now
+        if not cached.lowres then
+            return cached.bb
+        end
+        if cached.chk and (now - cached.chk) < 2 then
+            return cached.bb
+        end
+        cached.chk = now
+        local bim = M.getBookInfoManager()
+        if not bim then return cached.bb end
+        local ok, bookinfo = pcall(function() return bim:getBookInfo(filepath, true) end)
+        if not ok or not bookinfo then return cached.bb end
+        if not (bookinfo.cover_fetched and bookinfo.has_cover and bookinfo.cover_bb) then
+            return cached.bb
+        end
+        local src_w = bookinfo.cover_bb:getWidth()
+        local src_h = bookinfo.cover_bb:getHeight()
+        if src_w >= w and src_h >= h then
+            local bb = _scaleBBToSlot(bookinfo.cover_bb, w, h)
+            pcall(function() cached.bb:free() end)
+            cached.bb     = bb
+            cached.lowres = nil
+            cached.src_w  = src_w
+            cached.src_h  = src_h
+            return bb
+        end
         return cached.bb
     end
 
@@ -893,21 +919,21 @@ function M.getCoverBB(filepath, w, h)
     -- CORREÇÃO: Verificar se a tentativa de extração já foi feita
     if bookinfo and bookinfo.cover_fetched then
         if bookinfo.has_cover and bookinfo.cover_bb then
-            -- Guard: the BookInfoManager's cover_bb is a shared reference.
-            -- The CoverBrowser plugin may have replaced it with a scaled-down
-            -- copy sized for its own mosaic cells. If the bitmap is smaller
-            -- than our target slot in either dimension, scaling up would
-            -- produce a distorted/blurry result. Skip it and return nil so
-            -- the caller shows the placeholder — the BIM will eventually
-            -- provide a fresh native bitmap on the next render cycle.
             local src_w = bookinfo.cover_bb:getWidth()
             local src_h = bookinfo.cover_bb:getHeight()
-            if src_w < w or src_h < h then
-                return nil
+            local lowres = (src_w < w or src_h < h)
+            if lowres and not M.cover_extraction_pending then
+                M.cover_extraction_pending = true
+                pcall(function()
+                    bim:extractInBackground({{
+                        filepath    = filepath,
+                        cover_specs = { max_cover_w = w, max_cover_h = h },
+                    }})
+                end)
             end
             local bb = _scaleBBToSlot(bookinfo.cover_bb, w, h)
             if _bim_cover_count >= BIM_MAX_COVERS then _evictOldestCover() end
-            _bim_cover_cache[key] = { bb = bb, t = os.time() }
+            _bim_cover_cache[key] = { bb = bb, t = os.time(), lowres = lowres or nil, chk = os.time(), src_w = src_w, src_h = src_h }
             _bim_cover_count = _bim_cover_count + 1
             return bb
         else
