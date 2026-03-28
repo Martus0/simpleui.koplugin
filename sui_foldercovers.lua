@@ -508,8 +508,10 @@ local function _installItemCache()
         else
             filter = tostring(filter_raw)
         end
+        local collate_id = (collate and (collate.id or collate.text)) or ""
         local key = tostring(dirpath) .. "\0" .. tostring(f) .. "\0"
-                 .. tostring(fullpath) .. "\0" .. filter
+                 .. tostring(fullpath) .. "\0" .. filter .. "\0"
+                 .. tostring(collate_id)
         if not _cache[key] then
             if _cache_count >= _CACHE_MAX then
                 _cache = {}
