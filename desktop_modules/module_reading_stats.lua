@@ -157,7 +157,11 @@ local function fetchAllStats(shared_conn)
                 ELSE 0 END;]], start_today))
         r.streak = tonumber(streak_val) or 0
     end)
-    if not ok then logger.warn("simpleui: reading_stats: fetchAllStats failed: " .. tostring(err)) end
+    if not ok then logger.warn("simpleui: reading_stats: fetchAllStats failed: " .. tostring(err))
+        if shared_conn and Config.isFatalDbError(err) then
+            r._db_conn_fatal = true
+        end
+    end
     if own_conn then pcall(function() conn:close() end) end
 
     -- Count finished books via sidecar status — uses the shared DocSettings
@@ -382,6 +386,7 @@ function M.build(w, ctx)
 
     local n      = math.min(#stat_ids, RS_N_COLS)
     local stats  = getStats(ctx.db_conn)
+    if stats._db_conn_fatal and ctx then ctx.db_conn_fatal = true end
     local mode   = getType(ctx.pfx)
     local row    = HorizontalGroup:new{ align = "center" }
 
