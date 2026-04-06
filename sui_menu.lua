@@ -1586,6 +1586,9 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
             {
                 text         = _("Return to Book Folder"),
                 help_text    = _("When enabled, opening the file browser after finishing or closing a book navigates to the folder the book is in, matching native KOReader behaviour.\nWhen disabled (default), SimpleUI always returns to the library root."),
+                enabled_func = function()
+                    return G_reader_settings:readSetting("start_with", "filemanager") == "homescreen_simpleui"
+                end,
                 checked_func = function()
                     return G_reader_settings:isTrue("navbar_hs_return_to_book_folder")
                 end,
