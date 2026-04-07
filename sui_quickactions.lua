@@ -607,9 +607,35 @@ local function _scanFMPlugins()
             local cap = "on" .. fm_key:sub(1,1):upper() .. fm_key:sub(2)
             if type(val[cap]) == "function" then method = cap end
         end
+        -- Fallback: extract the callback from addToMainMenu and wrap it as a
+        -- synthetic method (_sui_launch). This covers plugins that only expose
+        -- their entry point as an inline callback in addToMainMenu (e.g.
+        -- solitaire, audiobookshelf, killersudoku, rakuyomi).
+        if not method then
+            local probe = {}
+            local ok = pcall(function() val:addToMainMenu(probe) end)
+            if ok then
+                local entry = probe[fm_key] or probe[val.name]
+                if entry and type(entry.callback) == "function" then
+                    local cb = entry.callback
+                    val._sui_launch = function(_self) cb() end
+                    method = "_sui_launch"
+                end
+            end
+        end
         if method then
             local raw     = (val.name or fm_key):gsub("^filemanager", "")
             local display = raw:sub(1,1):upper() .. raw:sub(2)
+            -- Prefer the menu text provided by addToMainMenu when available,
+            -- as it is already localised and more descriptive than the key.
+            local probe2 = {}
+            local ok2 = pcall(function() val:addToMainMenu(probe2) end)
+            if ok2 then
+                local entry2 = probe2[fm_key] or probe2[val.name]
+                if entry2 and type(entry2.text) == "string" and entry2.text ~= "" then
+                    display = entry2.text
+                end
+            end
             results[#results + 1] = { fm_key = fm_key, fm_method = method, title = display }
         end
         ::cont::
