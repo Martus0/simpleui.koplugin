@@ -1238,6 +1238,10 @@ msgstr ""
 msgid "Show Battery"
 msgstr ""
 
+#: desktop_modules/module_clock.lua:454
+msgid "Show Clock"
+msgstr ""
+
 #: desktop_modules/module_clock.lua:378
 msgid "Show Date"
 msgstr ""

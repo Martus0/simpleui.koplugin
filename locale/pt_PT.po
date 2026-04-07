@@ -1295,6 +1295,10 @@ msgstr "Definições"
 msgid "Show Battery"
 msgstr "Mostrar Bateria"
 
+#: desktop_modules/module_clock.lua:454
+msgid "Show Clock"
+msgstr "Mostrar Relógio"
+
 #: desktop_modules/module_clock.lua:378
 msgid "Show Date"
 msgstr "Mostrar Data"
