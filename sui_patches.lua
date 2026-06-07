@@ -3008,6 +3008,12 @@ function M.patchWallpaperFM(plugin)
     if ok_iw and IconWidget and not plugin._orig_wp_iconwidget_init then
         local orig_iw_init = IconWidget.init
         plugin._orig_wp_iconwidget_init = orig_iw_init
+        -- Expose the unwrapped init so that the icon-registration upvalue scan in
+        -- sui_menu.lua and sui_quicksettings_bar.lua can find ICONS_PATH / ICONS_DIRS
+        -- even after this patch replaces IconWidget.init.  Without this, rawget(iw,"init")
+        -- returns our wrapper, whose upvalues don't include ICONS_PATH/ICONS_DIRS, causing
+        -- Strategy 3 / Layer 3 to fire on every normal build and double-wrap init again.
+        IconWidget._simpleui_orig_init_for_scan = orig_iw_init
 
         IconWidget.init = function(iw_self, ...)
             orig_iw_init(iw_self, ...)

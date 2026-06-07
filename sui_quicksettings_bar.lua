@@ -883,7 +883,9 @@ function QSBar.install()
                     local injected = false
                     pcall(function()
                         local iw      = require("ui/widget/iconwidget")
-                        local iw_init = rawget(iw, "init")
+                        -- Prefer the unwrapped init so the scan finds ICONS_PATH/ICONS_DIRS
+                        -- even when sui_patches' alpha patch has already replaced iw.init.
+                        local iw_init = iw._simpleui_orig_init_for_scan or rawget(iw, "init")
                         if type(iw_init) ~= "function" then return end
                         local icons_path, icons_dirs
                         for i = 1, 64 do
@@ -920,7 +922,7 @@ function QSBar.install()
                         pcall(function()
                             local iw = require("ui/widget/iconwidget")
                             local orig_init = iw.init
-                            iw.init = function(self_iw)
+                            iw.init = function(self_iw, ...)
                                 if self_iw.icon == "simpleui_settings"
                                         and not self_iw.file
                                         and not self_iw.image then
@@ -928,7 +930,7 @@ function QSBar.install()
                                     return
                                 end
                                 if type(orig_init) == "function" then
-                                    orig_init(self_iw)
+                                    orig_init(self_iw, ...)
                                 end
                             end
                             logger.info("simpleui/qsbar: icon registered via IconWidget.init patch (fallback)")

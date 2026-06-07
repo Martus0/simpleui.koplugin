@@ -65,7 +65,11 @@ do
             local icon_file = plugin_root .. "/icons/settings.svg"
             local icon_exists = lfs.attributes(icon_file, "mode") == "file"
 
-            local iw_init = rawget(iw, "init")
+            -- Prefer the unwrapped init exposed by sui_patches' wallpaper alpha patch.
+            -- When that patch is active, rawget(iw,"init") returns its wrapper closure
+            -- which has no ICONS_PATH/ICONS_DIRS upvalues, making the scan below fail
+            -- and causing Strategy 3 to fire unnecessarily on every normal build.
+            local iw_init = iw._simpleui_orig_init_for_scan or rawget(iw, "init")
 
             local injected_path = false
             local injected_dir  = false
@@ -106,12 +110,12 @@ do
             -- patch IconWidget.init so icon="simpleui_settings" resolves directly.
             if not injected_path and not injected_dir and icon_exists then
                 local orig_init = iw.init
-                iw.init = function(self_iw)
+                iw.init = function(self_iw, ...)
                     if self_iw.icon == "simpleui_settings" and not self_iw.file and not self_iw.image then
                         self_iw.file = icon_file
                         return
                     end
-                    if type(orig_init) == "function" then orig_init(self_iw) end
+                    if type(orig_init) == "function" then orig_init(self_iw, ...) end
                 end
                 logger.info("simpleui: icon registered via IconWidget.init patch (fallback)")
             end
