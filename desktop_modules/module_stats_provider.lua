@@ -17,7 +17,7 @@
 -- DB roundtrips per cold-cache call: 2
 --   Query 1 — one pass over page_stat_data:
 --     • today_secs, today_pages   (start_time >= start_today)
---     • week_secs, week_pages     (7-day window, grouped by date)
+--     • week_secs, week_pages     (calendar week Mon–today, grouped by date)
 --     • avg_secs, avg_pages       (7-day window, grouped by date)
 --     • month_secs, month_pages   (start_time >= month_start)
 --     • year_secs                 (start_time >= year_start)
@@ -384,7 +384,9 @@ function SP.get(db_conn, year_str, needs_books)
 
     -- Compute timestamps once — shared by all sub-queries.
     local start_today = now - (t.hour * 3600 + t.min * 60 + t.sec)
-    local week_start  = start_today - 6 * 86400
+    -- Calendar week: Monday of the current week.
+    -- t.wday: 1=Sunday, 2=Monday, ..., 7=Saturday → days since Monday = (t.wday - 2) % 7
+    local week_start  = start_today - ((t.wday - 2) % 7) * 86400
     local month_start = os.time{ year = t.year, month = t.month, day = 1,
                                   hour = 0,     min  = 0,  sec = 0 }
     local year_start  = os.time{ year = t.year, month = 1, day = 1,
