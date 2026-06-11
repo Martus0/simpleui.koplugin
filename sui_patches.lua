@@ -1215,7 +1215,8 @@ function M.patchUIManagerShow(plugin)
         -- Wire the native "File browser" menu tab to use our flash-free
         -- close path every time a ReaderUI is shown (guard inside the fn).
         if widget.name == "ReaderUI" then
-            pcall(M.wireReaderMenuFMTab, plugin, widget)
+            pcall(M.wireReaderMenuFMTab,    plugin, widget)
+            pcall(M.patchReloadDocument,    plugin, widget)
         end
 
         local n_extra    = select("#", ...)
@@ -2656,6 +2657,29 @@ end
 -- preventing the FM from flashing before the HS appears — same technique as
 -- the gesture path, but without the nextTick wrapper.
 -- ---------------------------------------------------------------------------
+-- Suppress the "Closing book…" notice during document reloads triggered by
+-- formatting changes (font size, margins, line spacing, etc.).
+--
+-- KOReader's ReaderUI:reloadDocument() calls self:onClose(false) internally,
+-- which fires onCloseDocument — the same event we use to show the notice.
+-- There is no way to distinguish a reload-triggered close from a real close
+-- inside onCloseDocument itself, so we set _suppress_closing_notice on the
+-- plugin just before the original reloadDocument runs.  The flag is consumed
+-- (and cleared) unconditionally at the top of onCloseDocument.
+--
+-- Applied once per ReaderUI instance (guard: _simpleui_reload_patched).
+function M.patchReloadDocument(plugin, readerui)
+    if not readerui then return end
+    if readerui._simpleui_reload_patched then return end
+    local orig = readerui.reloadDocument
+    if type(orig) ~= "function" then return end
+    readerui.reloadDocument = function(self, ...)
+        plugin._suppress_closing_notice = true
+        return orig(self, ...)
+    end
+    readerui._simpleui_reload_patched = true
+end
+
 function M.wireReaderMenuFMTab(plugin, readerui)
     if not (readerui and readerui.menu) then return end
     local menu_ref = readerui.menu
