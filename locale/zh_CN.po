@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: simpleui\n"
 "POT-Creation-Date: 2026-06-03 19:48\n"
-"PO-Revision-Date: 2026-06-17 20:46+0800\n"
+"PO-Revision-Date: 2026-06-18 23:50+0800\n"
 "Last-Translator: \n"
 "Language-Team: Chinese (Simplified)\n"
 "Language: zh_CN\n"
@@ -2846,6 +2846,22 @@ msgstr "未找到设置。"
 msgid "Settings on Long Tap"
 msgstr "长按打开设置"
 
+#: sui_menu.lua:2541
+msgid "Preserve Deleted Books in Statistics"
+msgstr "删除书籍后仍保留统计"
+
+#: sui_menu.lua:2541
+msgid ""
+"When a finished book is deleted from the device, keep it counted in the "
+"Books Read statistics on the Home Screen.\n"
+"\n"
+"Books changed back to Reading or Abandoned are automatically removed from "
+"this list."
+msgstr ""
+"已读完的书籍从设备中删除后，仍保留在主屏幕“已读书籍”统计中。\n"
+"\n"
+"若将书籍状态改回“阅读中”或“放弃”，则会自动从该列表中移除。"
+
 #: desktop_modules/module_clock.lua:198 desktop_modules/module_clock.lua:248
 msgid "Seven"
 msgstr "七"
@@ -3966,7 +3982,7 @@ msgid "The maximum of %d quick action has been reached. Delete one first."
 msgid_plural ""
 "The maximum of %d quick actions has been reached. Delete one first."
 msgstr[0] "最多 %d 个快捷操作。请先删除一个。"
-msgstr[1] "最多 %d 个快捷操作。请先删除一个。"
+msgstr[0] "最多 %d 个快捷操作。请先删除一个。"
 
 #: desktop_modules/module_reading_stats.lua:542
 #: desktop_modules/module_reading_stats.lua:624
