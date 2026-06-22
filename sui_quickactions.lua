@@ -155,9 +155,17 @@ local function _goHome(target_fm)
         pcall(function() fc:onGotoPage(1) end)
         target_fm._navbar_suppress_path_change = nil
     else
+        -- Set _sui_show_folder_pending before changeToPath: the FileChooser
+        -- teardown that changeToPath triggers internally is seen by
+        -- patchUIManagerClose as a fullscreen-widget close, which would
+        -- schedule a spurious _doShowHS. The flag tells _doShowHS to abort.
+        target_fm._sui_show_folder_pending = true
         target_fm._navbar_suppress_path_change = true
         fc:changeToPath(home)
         target_fm._navbar_suppress_path_change = nil
+        -- _doShowHS clears the flag; clear it here too in case it was
+        -- never consumed (e.g. _doShowHS was skipped for another reason).
+        target_fm._sui_show_folder_pending = nil
     end
     if target_fm.updateTitleBarPath then
         pcall(function() target_fm:updateTitleBarPath(home, true) end)
@@ -456,15 +464,20 @@ local function _registerBuiltins()
             icon  = Config.ICON.library,
             is_in_place = false,
             execute = function(ctx)
-                local fm = ctx.fm or _liveFM()
+                -- Always prefer the live FM instance: ctx.fm may be stale
+                -- after the reader closes and the FM is recreated. The fallback
+                -- in navigate() resolves the live FM when _navbar_container is
+                -- absent, but a partially-destroyed old instance can still pass
+                -- that check while having no file_chooser.
+                local FM2   = package.loaded["apps/filemanager/filemanager"]
+                local fm    = (FM2 and FM2.instance) or ctx.fm or _liveFM()
                 if not _goHome(fm) then
                     -- file_chooser not yet created (transitional state after
-                    -- returning from the reader) — resolve the live FM instance
-                    -- at execution time rather than capturing ctx.fm in the
-                    -- closure, which may be stale by the next event cycle.
+                    -- returning from the reader) — schedule for the next cycle
+                    -- and re-resolve the live instance at that point.
                     UIManager:scheduleIn(0, function()
-                        local FM2 = package.loaded["apps/filemanager/filemanager"]
-                        local live_fm = (FM2 and FM2.instance) or fm
+                        local FM3 = package.loaded["apps/filemanager/filemanager"]
+                        local live_fm = (FM3 and FM3.instance) or fm
                         if not _goHome(live_fm) and live_fm and live_fm.file_chooser then
                             UIManager:setDirty(live_fm, "partial")
                         end

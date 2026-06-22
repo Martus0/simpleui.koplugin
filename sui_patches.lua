@@ -72,6 +72,19 @@ local _navpager_rebuild_pending = false
 
 local _raiseHSFromStack  -- forward declaration; defined below near closeReaderToHomescreen
 
+-- Always points at the most recently created SimpleUIPlugin instance.
+-- KOReader's FileManager:init() creates a brand-new plugin object on every
+-- FM (re)instantiation (PluginLoader:createPluginInstance), but
+-- patchFileManagerClass only re-installs the FileManager.setupLayout wrapper
+-- once per session (see setup_already_patched below) -- so closures defined
+-- inside that one-time installation would otherwise stay bound to whichever
+-- plugin instance happened to exist the first time it ran. Any of those
+-- closures that need "the current plugin" must resolve it via _live_plugin
+-- (updated on every patchFileManagerClass call) instead of using their
+-- captured `plugin` upvalue directly. This mirrors the existing
+-- UIManager._simpleui_close_plugin pattern used by patchUIManagerClose.
+local _live_plugin = nil
+
 -- Ensure the goal-tap callback is initialised. Called before any HS.show()
 -- or _raiseHSFromStack() that may need it. Idempotent: addToMainMenu is a
 -- no-op once _goalTapCallback has been set.
@@ -173,6 +186,16 @@ end
 function M.patchFileManagerClass(plugin)
     local FileManager      = require("apps/filemanager/filemanager")
 
+    -- Refresh the shared "live plugin" pointer on every call -- including
+    -- when setup_already_patched is true below.  This is what lets the
+    -- one-time-installed setupLayout/onShow/onPathChanged closures (which
+    -- captured a `plugin` upvalue from the very first installation) find
+    -- their way back to the current instance instead of silently operating
+    -- on a stale one after the FM is recreated (e.g. after returning from
+    -- the reader, after a rotation reinit, or around a suspend/resume cycle
+    -- that tears down and rebuilds the FileManager).
+    _live_plugin = plugin
+
     -- Guard: only wrap FileManager.setupLayout once per session.
     --
     -- patchFileManagerClass is called by installAll on every FM lifecycle event
@@ -227,6 +250,16 @@ function M.patchFileManagerClass(plugin)
 
     if not setup_already_patched then
     FileManager.setupLayout = function(fm_self)
+        -- Resolve the live plugin instance rather than relying on the
+        -- `plugin` upvalue captured when this closure was installed (which
+        -- only happens once per session -- see setup_already_patched above).
+        -- Without this, a FM recreated later in the session (e.g. returning
+        -- from the reader, a rotation reinit, or after a suspend/resume
+        -- cycle) would read/write active_action on a stale, disconnected
+        -- plugin instance -- the visible symptom being the navbar indicator
+        -- not following actual navigation (e.g. staying lit on "Homescreen"
+        -- after tapping into the Library).
+        local plugin = _live_plugin or plugin
         -- Calculate total navbar height (bottom bar + optional top bar).
         local topbar_on = SUISettings:nilOrTrue("simpleui_topbar_enabled")
         fm_self._navbar_height = Bottombar.TOTAL_H()
@@ -438,8 +471,21 @@ function M.patchFileManagerClass(plugin)
         fm_self._navbar_layout_h = cur_h
 
         local tabs = Config.loadTabConfig()
+        -- Recalculate the correct indicator from the FC path before wrapping.
+        -- When setupLayout runs after the reader closes, plugin.active_action
+        -- may already be "homescreen" (set by patchUIManagerClose to prepare
+        -- the HS re-open). The wrapWithNavbar call below would then build the
+        -- bar with "homescreen" active, which persists until something forces a
+        -- replaceBar — causing the intermittent "homescreen tab lit while in
+        -- library" symptom. Using the resolved path here keeps the bar correct
+        -- from the start, independently of what the HS lifecycle does afterwards.
+        local _wrap_active = plugin.active_action
+        local _fc_now = fm_self.file_chooser
+        if _fc_now and _fc_now.path then
+            _wrap_active = M._resolveTabForPath(_fc_now.path, tabs) or "home"
+        end
         local navbar_container, wrapped, bar, topbar, bar_idx, topbar_on2, topbar_idx =
-            UI.wrapWithNavbar(inner_widget, plugin.active_action, tabs)
+            UI.wrapWithNavbar(inner_widget, _wrap_active, tabs)
         UI.applyNavbarState(fm_self, navbar_container, bar, topbar, bar_idx, topbar_on2, topbar_idx, tabs)
         fm_self[1] = wrapped
         fm_self._simpleui_plugin = plugin
@@ -1224,6 +1270,17 @@ function M.patchUIManagerShow(plugin)
     end
 
     UIManager.show = function(um_self, widget, ...)
+        -- Resolve the live plugin instance rather than the `plugin` upvalue
+        -- captured when this wrapper was installed (only once per session --
+        -- see the guard above). UIManager._simpleui_show_plugin IS kept fresh
+        -- on every patchUIManagerShow call (FM recreation after returning
+        -- from the reader, rotation, suspend/resume, etc.), but until now
+        -- nothing inside this closure actually read it back -- every
+        -- reference below silently kept using the stale instance from the
+        -- very first install. That mismatch is what let the navbar's active
+        -- indicator drift out of sync with the widget actually on screen.
+        local plugin = UIManager._simpleui_show_plugin or plugin
+
         -- Fast path: non-fullscreen widgets need no SimpleUI logic.
         if not (widget and widget.covers_fullscreen) then
             return orig_show(um_self, widget, ...)
@@ -1971,6 +2028,11 @@ end
 -- ---------------------------------------------------------------------------
 
 function M.patchMenuForNavpager(plugin)
+    -- Keep the shared live-plugin pointer fresh regardless of call order
+    -- relative to patchFileManagerClass (installAll already calls this after
+    -- patchFileManagerClass, but this guards against future reordering).
+    _live_plugin = plugin
+
     local Menu = require("ui/widget/menu")
     if Menu._simpleui_navpager_patched then return end
     Menu._simpleui_navpager_patched = true
@@ -2084,6 +2146,13 @@ function M.patchMenuForNavpager(plugin)
         UIManager:scheduleIn(0, function()
             _navpager_rebuild_pending = false
             if not SUISettings:isTrue("simpleui_bar_navpager_enabled") then return end
+            -- Resolve the live plugin instance: Menu._simpleui_navpager_patched
+            -- guards this whole patch to a single installation per session, so
+            -- the `plugin` upvalue captured above can go stale once the FM is
+            -- recreated (reader return, rotation, suspend/resume). Falling back
+            -- to plugin.ui/.active_action on a stale instance here would build
+            -- the navpager-arrow bar against the wrong active tab.
+            local plugin = _live_plugin or plugin
             local fm = plugin.ui
             if not (fm and fm._navbar_container) then return end
             -- Re-read page state from the live widget at execution time.
